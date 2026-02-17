@@ -8,51 +8,72 @@ CLAVE_MILITANTE = "tresdefebrero2026"
 
 st.set_page_config(page_title="Lista 4 - Juan Debandi", page_icon="✌️", layout="centered")
 
-# --- DISEÑO COMPACTO Y ALTO IMPACTO ---
+# --- DISEÑO DE CONTRASTE EXTREMO PARA SOL ---
 st.markdown("""
     <style>
-    /* Escudo de fondo con fuerza */
+    /* Fondo con Escudo al 100% de color (Sin transparencia para que se vea bajo el sol) */
     .stApp {
         background-image: url("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Escudo_del_Partido_Justicialista.svg/1200px-Escudo_del_Partido_Justicialista.svg.png");
         background-repeat: no-repeat;
         background-attachment: fixed;
         background-position: center;
         background-size: 500px; 
-        opacity: 0.5;
+        background-color: white; /* Fondo blanco sólido */
     }
     
-    /* Achicamos el espacio superior de Streamlit */
+    /* CAJAS TOTALMENTE BLANCAS Y LETRAS NEGRAS PURAS */
+    .stTextInput input {
+        background-color: white !important;
+        color: black !important;
+        font-weight: bold !important;
+        border: 3px solid #000000 !important;
+        font-size: 20px !important;
+    }
+
+    /* Tablas con máximo contraste */
+    [data-testid="stDataFrame"] {
+        background-color: white !important;
+        border: 2px solid black !important;
+    }
+    
+    /* Forzar texto de tabla en Negro Absoluto */
+    [data-testid="stTable"] td, [data-testid="stDataFrame"] td, th {
+        color: black !important;
+        font-weight: 800 !important;
+        font-size: 16px !important;
+    }
+
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
-        max-width: 500px; /* Centra y achica el ancho para móviles */
+        max-width: 600px;
     }
 
-    /* Caja blanca compacta para el ingreso */
-    .login-box {
-        background-color: rgba(255, 255, 255, 0.95);
-        border-radius: 15px;
-        padding: 15px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
-        border: 1px solid #ddd;
-    }
-
-    /* Botón Peronista Sólido */
+    /* Botón Azul Intenso con Letra Blanca Gruesa */
     .stButton>button {
         width: 100%;
-        background-color: #003366;
-        color: white;
-        font-weight: bold;
-        height: 45px;
-        border-radius: 8px;
-        border: 2px solid #FFD700;
-        margin-top: 10px;
+        background-color: #00008B !important; /* Azul Rey muy oscuro */
+        color: white !important;
+        font-weight: 900 !important;
+        font-size: 24px !important;
+        height: 60px;
+        border-radius: 5px;
+        border: 4px solid #FFD700 !important; /* Borde dorado fuerte */
+        text-transform: uppercase;
     }
     
-    /* Ocultar barra lateral y menús innecesarios */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* Mensajes de Bienvenida */
+    .bienvenida {
+        text-align: center;
+        color: black;
+        background: white;
+        padding: 15px;
+        border: 4px solid #003366;
+        border-radius: 10px;
+        font-weight: 900;
+        font-size: 30px !important;
+    }
+
+    #MainMenu, footer, header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -61,33 +82,25 @@ if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
 if not st.session_state["autenticado"]:
-    # Mostramos el banner arriba de todo
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
-    elif os.path.exists("banner.png"):
-        st.image("banner.png", use_container_width=True)
-    else:
-        st.markdown("<h2 style='text-align:center; color:#003366; background:white; border-radius:10px;'>LISTA 4 - JUAN DEBANDI</h2>", unsafe_allow_html=True)
-
-    # Caja de login compacta
-    with st.container():
-        st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align:center; margin-top:0; color:#003366;'>✌️ INGRESO</h3>", unsafe_allow_html=True)
-        clave = st.text_input("Clave:", type="password", label_visibility="collapsed", placeholder="Introducí la clave aquí")
-        if st.button("ENTRAR"):
-            if clave == CLAVE_MILITANTE:
-                st.session_state["autenticado"] = True
-                st.rerun()
-            else:
-                st.error("Clave incorrecta.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
+    
+    clave = st.text_input("CLAVE:", type="password", placeholder="Escribí la contraseña")
+    if st.button("ENTRAR"):
+        if clave == CLAVE_MILITANTE:
+            st.session_state["autenticado"] = True
+            st.rerun()
+        else:
+            st.error("CLAVE INCORRECTA")
 
 else:
-    # --- BUSCADOR (YA LOGUEADO) ---
+    # --- PANTALLA DE CONSULTA ---
     if os.path.exists("banner.jpg"):
-        st.image("banner.jpg", width=250) # Banner más chico una vez adentro
+        st.image("banner.jpg", use_container_width=True)
     
-    st.markdown("### 🔎 Consulta de Padrón")
+    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
     
     @st.cache_data
     def cargar_datos():
@@ -105,7 +118,9 @@ else:
     df = cargar_datos()
 
     if df is not None:
-        busqueda = st.text_input("DNI, Apellido o Dirección:", placeholder="Ej: 30123456")
+        st.markdown("<b style='color:black; font-size:20px;'>Buscá por DNI, Apellido o Calle:</b>", unsafe_allow_html=True)
+        busqueda = st.text_input("Buscador", label_visibility="collapsed")
+        
         if busqueda:
             termino = busqueda.upper()
             resultado = df[
@@ -116,11 +131,12 @@ else:
             if not resultado.empty:
                 columnas = ['Apellido', 'Nombre', 'Matricula', 'DIRECCION', 'CIRCUITO', 'EDAD']
                 reales = [c for c in columnas if c in df.columns]
+                # Estilo de tabla de alto contraste
                 st.dataframe(resultado[reales], use_container_width=True)
             else:
-                st.warning("No encontrado.")
+                st.error("NO ENCONTRADO")
         
-        # Botón de salir discreto abajo
-        if st.button("Cerrar Sesión"):
+        st.write("")
+        if st.button("SALIR"):
             st.session_state["autenticado"] = False
             st.rerun()
