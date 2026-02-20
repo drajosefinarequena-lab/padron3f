@@ -31,15 +31,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SISTEMA DE PERSISTENCIA DE SESIÓN ---
+# --- INICIALIZACIÓN CRÍTICA DE SESIÓN ---
 if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
+    st.session_state.autenticado = False
 if "es_admin" not in st.session_state:
-    st.session_state["es_admin"] = False
+    st.session_state.es_admin = False
 if "log_ingresos" not in st.session_state:
-    st.session_state["log_ingresos"] = []
+    st.session_state.log_ingresos = []
 
-# --- FUNCIÓN DE CARGA DE DATOS ---
+# --- CARGA DE DATOS (FUERA DEL BUCLE DE LOGIN) ---
 @st.cache_data
 def cargar_datos():
     for enc in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
@@ -53,66 +53,61 @@ def cargar_datos():
             continue
     return None
 
-# --- PANTALLA DE ACCESO ---
-if not st.session_state["autenticado"]:
+# --- LÓGICA DE PANTALLAS ---
+if not st.session_state.autenticado:
+    # PANTALLA DE LOGIN
     if os.path.exists("Logo PDT - PJ.jpg.jpeg"):
         st.image("Logo PDT - PJ.jpg.jpeg", use_container_width=True)
-    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
+    st.markdown('<div class="bienvenida">INGRESO MILITANTE - LISTA 4</div>', unsafe_allow_html=True)
     
-    # El formulario de ingreso ahora es obligatorio
-    with st.container():
-        nombre = st.text_input("NOMBRE O REFERENTE:", key="input_nombre")
-        clave = st.text_input("CLAVE DE ACCESO:", type="password", key="input_clave")
-        
-        if st.button("ENTRAR AL SISTEMA"):
-            if clave == CLAVE_ADMIN:
-                st.session_state["autenticado"] = True
-                st.session_state["es_admin"] = True
-                st.rerun()
-            elif clave == CLAVE_MILITANTE and nombre != "":
-                ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                st.session_state["log_ingresos"].append({"Fecha": ahora, "Usuario": nombre})
-                st.session_state["autenticado"] = True
-                st.rerun()
-            elif nombre == "":
-                st.error("ESCRIBÍ TU NOMBRE")
-            else:
-                st.error("CLAVE INCORRECTA")
+    nombre_ingresado = st.text_input("NOMBRE O REFERENTE:", key="nom_login")
+    clave_ingresada = st.text_input("CLAVE DE ACCESO:", type="password", key="pwd_login")
+    
+    if st.button("ACCEDER AL PADRÓN"):
+        if clave_ingresada == CLAVE_ADMIN:
+            st.session_state.autenticado = True
+            st.session_state.es_admin = True
+            st.rerun()
+        elif clave_ingresada == CLAVE_MILITANTE and nombre_ingresado != "":
+            ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            st.session_state.log_ingresos.append({"Fecha": ahora, "Usuario": nombre_ingresado})
+            st.session_state.autenticado = True
+            st.rerun()
+        else:
+            st.error("DATOS INCORRECTOS")
 
-# --- PANTALLA DEL BUSCADOR (SOLO SI ESTÁ AUTENTICADO) ---
 else:
+    # PANTALLA DE BÚSQUEDA (SOLO SE VE SI st.session_state.autenticado == True)
     if os.path.exists("Logo PDT - PJ.jpg.jpeg"):
-        st.image("Logo PDT - PJ.jpg.jpeg", width=200)
-    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
-    st.markdown("<h4 style='text-align:center;'>BienvenidX CompañerX</h4>", unsafe_allow_html=True)
-
-    if st.session_state["es_admin"]:
-        with st.expander("🛡️ CONTROL DE INGRESOS"):
-            if st.session_state["log_ingresos"]:
-                st.table(pd.DataFrame(st.session_state["log_ingresos"]))
-
-    df = cargar_datos()
-
-    if df is not None:
-        st.markdown("### 🔎 BUSCAR AFILIADO")
-        # Usamos un formulario para el buscador para capturar el ENTER correctamente
-        with st.form("buscador_form", clear_on_submit=False):
-            busqueda = st.text_input("Ingresá DNI, Apellido o Calle:")
-            btn_buscar = st.form_submit_button("BUSCAR")
-            
-            if btn_buscar and busqueda:
-                termino = busqueda.upper()
-                mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(termino)).any(axis=1)
-                resultado = df[mask]
-                
-                if not resultado.empty:
-                    st.success(f"Encontrados: {len(resultado)}")
-                    st.dataframe(resultado, use_container_width=True)
-                else:
-                    st.error("NO ENCONTRADO")
+        st.image("Logo PDT - PJ.jpg.jpeg", width=150)
     
-    # Botón de salida
+    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
+    
+    if st.session_state.es_admin:
+        with st.expander("🛡️ PANEL DE CONTROL (ADMIN)"):
+            if st.session_state.log_ingresos:
+                st.table(pd.DataFrame(st.session_state.log_ingresos))
+    
+    df = cargar_datos()
+    
+    if df is not None:
+        st.markdown("### 🔎 BUSCAR")
+        # El buscador está fuera de cualquier formulario para que responda al instante
+        busqueda = st.text_input("Ingresá DNI o Apellido:", key="campo_busqueda")
+        
+        if busqueda:
+            termino = busqueda.upper()
+            mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(termino)).any(axis=1)
+            resultado = df[mask]
+            
+            if not resultado.empty:
+                st.success(f"Encontrados: {len(resultado)}")
+                st.dataframe(resultado, use_container_width=True)
+            else:
+                st.warning("NO SE ENCONTRARON RESULTADOS")
+    
+    st.write("---")
     if st.button("CERRAR SESIÓN"):
-        st.session_state["autenticado"] = False
-        st.session_state["es_admin"] = False
+        st.session_state.autenticado = False
+        st.session_state.es_admin = False
         st.rerun()
