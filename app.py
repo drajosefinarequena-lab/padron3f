@@ -72,7 +72,6 @@ else:
 
     @st.cache_data
     def cargar_datos():
-        # Intentamos varias codificaciones para evitar errores de lectura
         for enc in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
             try:
                 df = pd.read_csv("datos.csv", sep=None, engine='python', encoding=enc, on_bad_lines='skip')
@@ -90,5 +89,20 @@ else:
         st.markdown("### 🔎 BUSCAR AFILIADO")
         busqueda = st.text_input("Ingresá DNI, Apellido o Calle:")
         
+        # Corrección del NameError: Solo definimos 'termino' si hay búsqueda
         if busqueda:
-            termino
+            termino_busqueda = busqueda.upper()
+            mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(termino_busqueda)).any(axis=1)
+            resultado = df[mask]
+            
+            if not resultado.empty:
+                st.success(f"Encontrados: {len(resultado)}")
+                st.dataframe(resultado, use_container_width=True)
+            else:
+                st.error("NO ENCONTRADO")
+    else:
+        st.error("No se pudo leer el padrón. Revisá el archivo 'datos.csv'.")
+
+    if st.button("CERRAR SESIÓN"):
+        st.session_state["autenticado"] = False
+        st.rerun()
