@@ -60,7 +60,7 @@ if not st.session_state["autenticado"]:
         else:
             st.error("CLAVE INCORRECTA")
 else:
-    # --- BUSCADOR ---
+    # --- PANTALLA POST-INGRESO ---
     if os.path.exists("Logo PDT - PJ.jpg.jpeg"):
         st.image("Logo PDT - PJ.jpg.jpeg", width=200)
     st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
@@ -72,33 +72,4 @@ else:
 
     @st.cache_data
     def cargar_datos():
-        # Intentamos varias codificaciones comunes para evitar el error de la imagen
-        for encoding in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
-            try:
-                df = pd.read_csv("datos.csv", sep=None, engine='python', encoding=encoding, on_bad_lines='skip')
-                if 'Matricula' in df.columns:
-                    df['Matricula'] = df['Matricula'].astype(str).str.replace('.0', '', regex=False)
-                return df
-            except Exception:
-                continue
-        return None
-
-    df = cargar_datos()
-
-    if df is not None:
-        st.markdown("### 🔎 BUSCAR AFILIADO")
-        busqueda = st.text_input("Ingresá DNI, Apellido o Calle:")
-        if busqueda:
-            termino = busqueda.upper()
-            resultado = df[df.apply(lambda row: row.astype(str).str.upper().contains(termino).any(), axis=1)]
-            if not resultado.empty:
-                st.success(f"Encontrados: {len(resultado)}")
-                st.dataframe(resultado, use_container_width=True)
-            else:
-                st.error("NO ENCONTRADO")
-    else:
-        st.error("Error crítico: No se pudo leer el archivo 'datos.csv'. Verificá que el archivo no esté abierto en Excel al subirlo.")
-
-    if st.button("CERRAR SESIÓN"):
-        st.session_state["autenticado"] = False
-        st.rerun()
+        for encoding in ['latin-1', 'iso-8859-1',
