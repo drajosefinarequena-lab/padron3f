@@ -72,4 +72,23 @@ else:
 
     @st.cache_data
     def cargar_datos():
-        for encoding in ['latin-1', 'iso-8859-1',
+        # Intentamos varias codificaciones para evitar errores de lectura
+        for enc in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
+            try:
+                df = pd.read_csv("datos.csv", sep=None, engine='python', encoding=enc, on_bad_lines='skip')
+                df = df.fillna('')
+                if 'Matricula' in df.columns:
+                    df['Matricula'] = df['Matricula'].astype(str).str.replace('.0', '', regex=False)
+                return df
+            except:
+                continue
+        return None
+
+    df = cargar_datos()
+
+    if df is not None:
+        st.markdown("### 🔎 BUSCAR AFILIADO")
+        busqueda = st.text_input("Ingresá DNI, Apellido o Calle:")
+        
+        if busqueda:
+            termino
