@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 
 # 1. CONFIGURACIÓN DE SEGURIDAD
-CLAVE_MILITANTE = "tresdefebrero2026"
+CLAVE_MILITANTE = "interna123pj2026"
 CLAVE_ADMIN = "josefina3f_admin"
 
 st.set_page_config(page_title="Lista 4 - Juan Debandi", page_icon="✌️", layout="centered")
@@ -111,3 +111,4 @@ else:
         st.session_state.autenticado = False
         st.session_state.es_admin = False
         st.rerun()
+
