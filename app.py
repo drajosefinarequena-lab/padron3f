@@ -91,6 +91,50 @@ else:
     st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
     
     if st.session_state.es_admin:
-        with st.expander("🛡️ AUDITORÍA DE SEGURIDAD (ÉXITOS Y ERRORES)"):
+        with st.expander("🛡️ AUDITORÍA DE SEGURIDAD (HISTORIAL COMPLETO)"):
             if os.path.exists("log_accesos.csv"):
-                st.table(pd
+                st.table(pd.read_csv("log_accesos.csv"))
+
+    @st.cache_data
+    def cargar_datos():
+        for enc in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
+            try:
+                df_c = pd.read_csv("datos.csv", sep=None, engine='python', encoding=enc, on_bad_lines='skip')
+                df_c = df_c.fillna('')
+                
+                # FILTRO ESTRICTO: Solo DNI, Nombre, Apellido y Dirección
+                columnas_visibles = []
+                for col in df_c.columns:
+                    c_up = col.upper()
+                    if any(x in c_up for x in ['MATRICULA', 'DNI', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'DOMICILIO', 'CALLE']):
+                        columnas_visibles.append(col)
+                
+                df_c = df_c[columnas_visibles]
+                
+                # Limpiar DNI si existe
+                for col in df_c.columns:
+                    if any(x in col.upper() for x in ['MATRICULA', 'DNI']):
+                        df_c[col] = df_c[col].astype(str).str.replace('.0', '', regex=False)
+                
+                return df_c
+            except: continue
+        return None
+
+    df = cargar_datos()
+
+    if df is not None:
+        st.markdown("### 🔎 BUSCAR AFILIADO")
+        with st.form("buscador_form", clear_on_submit=False):
+            busqueda = st.text_input("Ingresá DNI o Apellido:")
+            if st.form_submit_button("BUSCAR"):
+                if busqueda:
+                    mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(busqueda.upper())).any(axis=1)
+                    res = df[mask]
+                    if not res.empty:
+                        st.success(f"Encontrados: {len(res)}")
+                        st.dataframe(res, use_container_width=True)
+                    else: st.error("NO ENCONTRADO")
+
+    if st.button("CERRAR SESIÓN"):
+        st.session_state.autenticado = False
+        st.rerun()
