@@ -33,7 +33,7 @@ if os.path.exists("banner.jpg"):
 elif os.path.exists("banner.jpeg"):
     st.image("banner.jpeg", use_container_width=True)
 
-# --- FUNCIÓN DE ENVÍO A GOOGLE SHEETS ---
+# --- FUNCIÓN DE ENVÍO ---
 def enviar_a_google_sheets(datos):
     try:
         url = st.secrets["URL_SHEET_BEST"]
@@ -42,49 +42,38 @@ def enviar_a_google_sheets(datos):
     except:
         return False
 
-# --- OBTENER IP PARA REGISTRO ---
-def obtener_ip():
-    try: return requests.get('https://api.ipify.org', timeout=3).text
-    except: return "IP No rastreable"
-
 # --- SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "Militante"
 
-# --- PANTALLA DE LOGUEO ---
+# --- ACCESO ---
 if not st.session_state.autenticado:
     st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
-    st.markdown('<div class="aviso-seguridad">⚠️ EL SISTEMA REGISTRARÁ SU UBICACIÓN PARA SEGURIDAD DEL PADRÓN</div>', unsafe_allow_html=True)
+    st.markdown('<div class="aviso-seguridad">⚠️ REGISTRO DE UBICACIÓN ACTIVO PARA SEGURIDAD</div>', unsafe_allow_html=True)
     
-    acepta_geo = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN E IP PARA INGRESAR")
+    acepta_geo = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN E IP")
     usuario_ing = st.selectbox("LOCALIDAD / EQUIPO:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
     clave_ing = st.text_input("CONTRASEÑA TÁCTICA:", type="password")
     
     if st.button("ACCEDER AL PADRÓN", disabled=not acepta_geo):
-        if clave_ing == CLAVE_ADMIN:
-            st.session_state.autenticado, st.session_state.es_admin = True, True
-            st.session_state.usuario_actual = "ADMIN"
-            st.rerun()
-        elif usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing:
+        if clave_ing == CLAVE_ADMIN or (usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing):
             st.session_state.autenticado = True
-            st.session_state.usuario_actual = usuario_ing
+            st.session_state.usuario_actual = usuario_ing if clave_ing != CLAVE_ADMIN else "ADMIN"
             st.rerun()
         else:
             st.error("CREDENCIALES INCORRECTAS")
 
-# --- PANTALLA OPERATIVA ---
 else:
     st.markdown(f'<div class="bienvenida">OPERATIVO: {st.session_state.usuario_actual}</div>', unsafe_allow_html=True)
 
     @st.cache_data
     def cargar_padron():
         try:
-            # Cargamos con soporte para errores de línea y limpieza de columnas
+            # Blindaje contra errores de fila en el CSV
             df = pd.read_csv("datos.csv", encoding='latin-1', on_bad_lines='skip', sep=None, engine='python').fillna('')
             df.columns = [c.upper().strip() for c in df.columns]
             return df
-        except Exception as e:
-            st.error(f"Fallo al leer datos.csv: {e}")
+        except:
             return None
 
     padron = cargar_padron()
@@ -98,57 +87,49 @@ else:
             
             if not resultado.empty:
                 st.success(f"Se encontraron {len(resultado)} coincidencias")
-                st.dataframe(resultado.head(15), use_container_width=True)
+                st.dataframe(resultado.head(20), use_container_width=True)
                 
                 st.markdown("---")
                 st.markdown("### 🗳️ REGISTRAR COMPROMISO")
-                with st.form("form_relevamiento", clear_on_submit=True):
-                    # Identificar columnas críticas del CSV
-                    cols = resultado.columns
-                    c_dni = [c for c in cols if any(x in c for x in ['DNI', 'MATRI', 'DOC'])][0]
-                    # Intentamos separar Apellido y Nombre si existen por separado
-                    c_ape = [c for c in cols if 'APE' in c]
-                    c_nom = [c for c in cols if 'NOM' in c]
-                    
-                    # Si no los encuentra por separado, usa la primera columna de texto que encuentre
-                    col_identidad = c_ape[0] if c_ape else c_nom[0] if c_nom else cols[0]
-
-                    # Armamos el diccionario de opciones para el selector
-                    opciones_vecinos = {}
-                    for idx, row in resultado.head(10).iterrows():
-                        # Etiqueta visual para el militante
-                        label = f"{row[col_identidad]} | DNI: {row[c_dni]}"
-                        opciones_vecinos[label] = row
-                    
-                    seleccionado = st.selectbox("Confirmar Identidad del Vecino:", list(opciones_vecinos.keys()))
+                
+                # Identificar columnas automáticamente
+                cols = resultado.columns
+                c_dni = [c for c in cols if any(x in c for x in ['DNI', 'MATRI', 'DOC'])][0]
+                c_ape = [c for c in cols if 'APE' in c]
+                c_nom = [c for c in cols if 'NOM' in c]
+                
+                # Armamos el diccionario único de esta búsqueda
+                opciones_vecinos = {}
+                for idx, row in resultado.iterrows():
+                    # Usamos el DNI como parte de la clave para que no se repitan familiares
+                    label = f"{row[c_ape[0]] if c_ape else ''}, {row[c_nom[0]] if c_nom else ''} | DNI: {row[c_dni]}"
+                    opciones_vecinos[label] = row
+                
+                seleccionado = st.selectbox("Seleccionar Vecino específico:", list(opciones_vecinos.keys()))
+                
+                # Al cambiar la persona, el "key" del form cambia y se resetea todo
+                with st.form(key=f"form_{seleccionado}"):
                     voto = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS"], horizontal=True)
                     nota = st.text_input("Notas de la visita:")
                     
                     if st.form_submit_button("GUARDAR EN GOOGLE SHEETS"):
                         vecino_datos = opciones_vecinos[seleccionado]
-                        
-                        # Armamos el nombre completo combinando columnas si existen
-                        nombre_final = ""
-                        if c_ape and c_nom:
-                            nombre_final = f"{vecino_datos[c_ape[0]]}, {vecino_datos[c_nom[0]]}"
-                        else:
-                            nombre_final = str(vecino_datos[col_identidad])
+                        nombre_full = f"{vecino_datos[c_ape[0]]}, {vecino_datos[c_nom[0]]}" if c_ape and c_nom else seleccionado.split('|')[0].strip()
 
-                        # DATOS QUE VAN AL GOOGLE SHEETS
                         datos_api = {
                             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                             "Militante": st.session_state.usuario_actual,
-                            "DNI_Vecino": str(vecino_datos[c_dni]), # TRAE EL DNI LIMPIO
-                            "Nombre_Vecino": nombre_final,          # TRAE NOMBRE Y APELLIDO
+                            "DNI_Vecino": str(vecino_datos[c_dni]),
+                            "Nombre_Vecino": nombre_full,
                             "Estado": voto,
                             "Observaciones": nota
                         }
                         
                         if enviar_a_google_sheets(datos_api):
                             st.balloons()
-                            st.success(f"¡Registrado con éxito!")
+                            st.success(f"¡Registrado con éxito: {nombre_full}!")
                         else:
-                            st.error("Error al conectar con la base de datos.")
+                            st.error("Error al guardar. Revisa la base de datos.")
             else:
                 st.warning("Sin coincidencias.")
 
