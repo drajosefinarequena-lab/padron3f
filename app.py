@@ -107,13 +107,11 @@ else:
                 
                 opciones_vecinos = {}
                 for idx, row in resultado.iterrows():
-                    # Clave única con DNI para no repetir familiares
                     label = f"{row[c_ape[0]] if c_ape else ''}, {row[c_nom[0]] if c_nom else ''} | DNI: {row[c_dni]}"
                     opciones_vecinos[label] = row
                 
                 seleccionado = st.selectbox("Seleccionar Vecino específico:", list(opciones_vecinos.keys()))
                 
-                # El formulario se reinicia al cambiar de vecino gracias al key único
                 with st.form(key=f"form_{seleccionado}"):
                     voto = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS"], horizontal=True)
                     nota = st.text_input("Notas de la visita:")
@@ -122,10 +120,11 @@ else:
                         vecino_datos = opciones_vecinos[seleccionado]
                         nombre_full = f"{vecino_datos[c_ape[0]]}, {vecino_datos[c_nom[0]]}" if c_ape and c_nom else seleccionado.split('|')[0].strip()
 
-                        # SE ENVÍAN LOS 7 DATOS AL GOOGLE SHEET
+                        # ENVIAMOS LOS DATOS CON AMBAS VERSIONES PARA QUE NO FALLE
                         datos_api = {
                             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
                             "Referente": st.session_state.nombre_referente,
+                            "REFERENTE": st.session_state.nombre_referente, # AGREGADO PARA TU EXCEL EN MAYÚSCULAS
                             "Militante": st.session_state.usuario_actual,
                             "DNI_Vecino": str(vecino_datos[c_dni]),
                             "Nombre_Vecino": nombre_full,
@@ -137,7 +136,7 @@ else:
                             st.balloons()
                             st.success(f"¡Registrado! Vecino: {nombre_full}")
                         else:
-                            st.error("Error al guardar. Verificá que la columna 'Referente' exista en el Excel.")
+                            st.error("Error al guardar. Revisa la base de datos.")
             else:
                 st.warning("Sin coincidencias.")
 
