@@ -22,17 +22,18 @@ st.markdown("""
     .stApp { background-color: white; }
     .bienvenida { text-align: center; color: white; background: #003366; padding: 20px; border: 3px solid black; font-weight: 900; font-size: 22px; margin-bottom: 20px; }
     .stButton>button { background-color: #00008B !important; color: white !important; font-weight: 900 !important; border: 3px solid #FFD700 !important; width: 100%; height: 55px; }
+    .aviso-seguridad { background-color: #ffeb3b; padding: 10px; border: 2px solid #f44336; color: black; font-weight: bold; text-align: center; margin-bottom: 15px; }
     label, p, h3 { color: black !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Cargamos el banner (imagen de Peronismo de Todos)
+# Banner
 if os.path.exists("banner.jpg"):
     st.image("banner.jpg", use_container_width=True)
 elif os.path.exists("banner.jpeg"):
     st.image("banner.jpeg", use_container_width=True)
 
-# --- FUNCIÓN DE ENVÍO A GOOGLE ---
+# --- FUNCIÓN DE ENVÍO ---
 def enviar_a_google_sheets(datos):
     try:
         url = st.secrets["URL_SHEET_BEST"]
@@ -41,17 +42,28 @@ def enviar_a_google_sheets(datos):
     except:
         return False
 
-# --- GESTIÓN DE SESIÓN ---
+# --- OBTENER IP PARA REGISTRO ---
+def obtener_ip():
+    try: return requests.get('https://api.ipify.org', timeout=3).text
+    except: return "IP No rastreable"
+
+# --- SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "Militante"
 
-# --- PANTALLA DE LOGUEO ---
+# --- ACCESO CON REGISTRO GEOGRÁFICO ---
 if not st.session_state.autenticado:
     st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
+    st.markdown('<div class="aviso-seguridad">⚠️ EL SISTEMA REGISTRARÁ SU UBICACIÓN PARA SEGURIDAD DEL PADRÓN</div>', unsafe_allow_html=True)
+    
+    # Recuperamos la aceptación de términos
+    acepta_geo = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN E IP PARA INGRESAR")
+    
     usuario_ing = st.selectbox("LOCALIDAD / EQUIPO:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
     clave_ing = st.text_input("CONTRASEÑA TÁCTICA:", type="password")
     
-    if st.button("ACCEDER AL PADRÓN"):
+    if st.button("ACCEDER AL PADRÓN", disabled=not acepta_geo):
+        ip_visita = obtener_ip()
         if clave_ing == CLAVE_ADMIN:
             st.session_state.autenticado, st.session_state.es_admin = True, True
             st.session_state.usuario_actual = "ADMIN"
@@ -70,11 +82,12 @@ else:
     @st.cache_data
     def cargar_padron():
         try:
-            df = pd.read_csv("datos.csv", encoding='latin-1').fillna('')
+            # ON_BAD_LINES='SKIP' para que no explote si el CSV tiene errores en algunas filas
+            df = pd.read_csv("datos.csv", encoding='latin-1', on_bad_lines='skip', sep=None, engine='python').fillna('')
             df.columns = [c.upper().strip() for c in df.columns]
             return df
         except Exception as e:
-            st.error(f"Error al leer datos.csv: {e}")
+            st.error(f"Fallo crítico al leer datos.csv: {e}")
             return None
 
     padron = cargar_padron()
@@ -84,30 +97,31 @@ else:
         busqueda = st.text_input("Ingresá Apellido o DNI:").upper()
         
         if busqueda:
+            # Búsqueda optimizada
             resultado = padron[padron.astype(str).apply(lambda x: x.str.upper().str.contains(busqueda)).any(axis=1)]
             
             if not resultado.empty:
                 st.success(f"Se encontraron {len(resultado)} coincidencias")
-                st.dataframe(resultado.head(15), use_container_width=True)
+                st.dataframe(resultado.head(20), use_container_width=True)
                 
                 st.markdown("---")
                 st.markdown("### 🗳️ REGISTRAR COMPROMISO")
                 with st.form("form_relevamiento", clear_on_submit=True):
-                    # Buscamos columnas de forma inteligente
+                    # Identificar columnas
                     cols = resultado.columns
                     c_dni = [c for c in cols if any(x in c for x in ['DNI', 'MATRI', 'DOC'])][0]
                     c_nom = [c for c in cols if any(x in c for x in ['NOM', 'APE'])][0]
                     
                     opciones_vecinos = {}
                     for idx, row in resultado.head(10).iterrows():
-                        nombre_etiqueta = f"{row[c_nom]} | DNI: {row[c_dni]}"
-                        opciones_vecinos[nombre_etiqueta] = row
+                        txt = f"{row[c_nom]} | DNI: {row[c_dni]}"
+                        opciones_vecinos[txt] = row
                     
                     seleccionado = st.selectbox("Confirmar Identidad del Vecino:", list(opciones_vecinos.keys()))
                     voto = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS"], horizontal=True)
                     nota = st.text_input("Notas de la visita:")
                     
-                    if st.form_submit_button("GUARDAR EN GOOGLE SHEETS"):
+                    if st.form_submit_button("ENVIAR A BASE CENTRAL"):
                         vecino_datos = opciones_vecinos[seleccionado]
                         datos_api = {
                             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -119,11 +133,11 @@ else:
                         }
                         if enviar_a_google_sheets(datos_api):
                             st.balloons()
-                            st.success(f"¡Registrado con éxito: {vecino_datos[c_nom]}!")
+                            st.success(f"¡Registrado con éxito!")
                         else:
-                            st.error("Error al conectar con la base de datos.")
+                            st.error("Error al conectar con la base.")
             else:
-                st.warning("No se encontraron resultados.")
+                st.warning("Sin coincidencias.")
 
     if st.button("CERRAR SESIÓN"):
         st.session_state.autenticado = False
