@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 import requests
 
-# 1. SEGURIDAD: CLAVES POR LOCALIDAD Y ADMIN
+# 1. CONFIGURACIÓN DE SEGURIDAD
 USUARIOS_AUTORIZADOS = {
     "CASEROS": "L4_3f_CAS",
     "CIUDADELA": "L4_3f_CIU",
@@ -24,21 +24,18 @@ CLAVE_ADMIN = "josefina3f_admin"
 
 st.set_page_config(page_title="Lista 4 - Peronismo de Todos", page_icon="✌️", layout="centered")
 
-# --- DISEÑO DE ALTO CONTRASTE ---
+# --- ESTILOS PERSONALIZADOS ---
 st.markdown("""
     <style>
     .stApp { background-color: white; background-image: url("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Escudo_del_Partido_Justicialista.svg/1200px-Escudo_del_Partido_Justicialista.svg.png"); background-repeat: no-repeat; background-position: center; background-size: 400px; opacity: 0.9; }
     .block-container { padding-top: 1rem !important; max-width: 600px; }
-    label, p, h3, h4 { color: black !important; font-weight: 900 !important; font-size: 18px !important; }
-    .stTextInput input { background-color: white !important; color: black !important; border: 4px solid black !important; font-weight: bold !important; font-size: 18px !important; }
+    label, p, h3, h4 { color: black !important; font-weight: 900 !important; }
     .bienvenida { text-align: center; color: white; background: #003366; padding: 15px; border: 3px solid black; font-weight: 900; font-size: 20px; margin-bottom: 10px; }
-    .stButton>button { background-color: #00008B !important; color: white !important; font-weight: 900 !important; border: 3px solid #FFD700 !important; width: 100%; height: 50px; font-size: 20px !important; }
-    .aviso-seguridad { background-color: #ffeb3b; padding: 15px; border: 2px solid #f44336; border-radius: 5px; color: black; font-weight: bold; margin-bottom: 20px; text-align: center; }
-    #MainMenu, footer, header {visibility: hidden;}
+    .stButton>button { background-color: #00008B !important; color: white !important; font-weight: 900 !important; border: 3px solid #FFD700 !important; width: 100%; height: 50px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SISTEMA DE REGISTRO PERSISTENTE ---
+# --- FUNCIONES DE APOYO ---
 def registrar_evento(usuario, ubicacion, resultado):
     archivo_log = "log_accesos.csv"
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -55,17 +52,23 @@ def obtener_datos_ip():
         return f"{data.get('city')}, {data.get('region')} (IP: {data.get('ip')})"
     except: return "IP No rastreable"
 
-# --- INICIALIZACIÓN DE SESIÓN ---
+def enviar_a_google_sheets(datos):
+    """Envía los datos a través de la API de Sheet.best"""
+    try:
+        url = st.secrets["URL_SHEET_BEST"]
+        response = requests.post(url, json=datos)
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
+        return False
+
+# --- GESTIÓN DE SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "es_admin" not in st.session_state: st.session_state.es_admin = False
 
 # --- PANTALLA DE ACCESO ---
 if not st.session_state.autenticado:
-    if os.path.exists("Logo PDT - PJ.jpg.jpeg"):
-        st.image("Logo PDT - PJ.jpg.jpeg", use_container_width=True)
     st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
-    st.markdown('<div class="aviso-seguridad">⚠️ AVISO: Se registra ubicación geográfica para evitar filtraciones.</div>', unsafe_allow_html=True)
-    
     acepta_terminos = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN PARA INGRESAR")
     usuario_ing = st.selectbox("LOCALIDAD:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
     clave_ing = st.text_input("CLAVE:", type="password")
@@ -73,68 +76,77 @@ if not st.session_state.autenticado:
     if st.button("ENTRAR", disabled=not acepta_terminos):
         ubi_actual = obtener_datos_ip()
         if clave_ing == CLAVE_ADMIN:
-            st.session_state.autenticado = True
-            st.session_state.es_admin = True
+            st.session_state.autenticado, st.session_state.es_admin = True, True
+            st.session_state.usuario_actual = "ADMIN"
             registrar_evento("ADMIN", ubi_actual, "EXITO_ADMIN")
             st.rerun()
         elif usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing:
-            registrar_evento(usuario_ing, ubi_actual, "EXITO")
             st.session_state.autenticado = True
             st.session_state.usuario_actual = usuario_ing
+            registrar_evento(usuario_ing, ubi_actual, "EXITO")
             st.rerun()
         else:
-            registrar_evento(usuario_ing if usuario_ing != "---" else "DESCONOCIDO", ubi_actual, "ERROR_LOGIN")
-            st.error("DATOS INCORRECTOS. Intento registrado por seguridad.")
+            st.error("DATOS INCORRECTOS.")
 
 else:
-    # --- PANTALLA DE CONSULTA ---
-    st.markdown('<div class="bienvenida">CONSULTA EL PADRÓN</div>', unsafe_allow_html=True)
+    # --- PANTALLA PRINCIPAL ---
+    st.markdown(f'<div class="bienvenida">PANEL: {st.session_state.usuario_actual}</div>', unsafe_allow_html=True)
     
-    if st.session_state.es_admin:
-        with st.expander("🛡️ AUDITORÍA DE SEGURIDAD (HISTORIAL COMPLETO)"):
-            if os.path.exists("log_accesos.csv"):
-                st.table(pd.read_csv("log_accesos.csv"))
-
     @st.cache_data
-    def cargar_datos():
-        for enc in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
-            try:
-                df_c = pd.read_csv("datos.csv", sep=None, engine='python', encoding=enc, on_bad_lines='skip')
-                df_c = df_c.fillna('')
-                
-                # FILTRO ESTRICTO: Solo DNI, Nombre, Apellido y Dirección
-                columnas_visibles = []
-                for col in df_c.columns:
-                    c_up = col.upper()
-                    if any(x in c_up for x in ['MATRICULA', 'DNI', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'DOMICILIO', 'CALLE']):
-                        columnas_visibles.append(col)
-                
-                df_c = df_c[columnas_visibles]
-                
-                # Limpiar DNI si existe
-                for col in df_c.columns:
-                    if any(x in col.upper() for x in ['MATRICULA', 'DNI']):
-                        df_c[col] = df_c[col].astype(str).str.replace('.0', '', regex=False)
-                
-                return df_c
-            except: continue
-        return None
+    def cargar_datos_padron():
+        try:
+            df_c = pd.read_csv("datos.csv", encoding='latin-1', on_bad_lines='skip')
+            df_c = df_c.fillna('')
+            # Limpieza básica de columnas DNI
+            for col in df_c.columns:
+                if any(x in col.upper() for x in ['DNI', 'MATRICULA']):
+                    df_c[col] = df_c[col].astype(str).str.replace('.0', '', regex=False)
+            return df_c
+        except: return None
 
-    df = cargar_datos()
+    df = cargar_datos_padron()
 
     if df is not None:
-        st.markdown("### 🔎 BUSCAR AFILIADO")
-        with st.form("buscador_form", clear_on_submit=False):
-            busqueda = st.text_input("Ingresá DNI o Apellido:")
-            if st.form_submit_button("BUSCAR"):
-                if busqueda:
-                    mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(busqueda.upper())).any(axis=1)
-                    res = df[mask]
-                    if not res.empty:
-                        st.success(f"Encontrados: {len(res)}")
-                        st.dataframe(res, use_container_width=True)
-                    else: st.error("NO ENCONTRADO")
+        st.markdown("### 🔎 BÚSQUEDA DE AFILIADOS")
+        busqueda = st.text_input("Ingresá DNI o Apellido:").upper()
+        
+        if busqueda:
+            mask = df.astype(str).apply(lambda row: row.str.upper().str.contains(busqueda)).any(axis=1)
+            res = df[mask]
+            
+            if not res.empty:
+                st.success(f"Resultados: {len(res)}")
+                st.dataframe(res, use_container_width=True)
+                
+                # --- FORMULARIO DE ACCIÓN TERRITORIAL ---
+                if len(res) < 10: # Evitar formularios masivos si la búsqueda es muy amplia
+                    st.markdown("---")
+                    st.markdown("### 🗳️ REGISTRAR VISITA")
+                    with st.form("registro_voto", clear_on_submit=True):
+                        # Selección de vecino si hay más de uno en el resultado
+                        opciones_vecinos = [f"{row.get('APELLIDO', '')}, {row.get('NOMBRE', '')} ({row.get('DNI', row.get('MATRICULA', ''))})" for i, row in res.iterrows()]
+                        vecino_sel = st.selectbox("Confirmar Vecino:", opciones_vecinos)
+                        
+                        voto_estado = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS / NO VOTA"], horizontal=True)
+                        comentario = st.text_area("Observaciones (Ej: Necesita transporte, No estaba):")
+                        
+                        if st.form_submit_button("GUARDAR EN TERRITORIO"):
+                            datos_finales = {
+                                "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                "Militante": st.session_state.usuario_actual,
+                                "DNI_Vecino": vecino_sel.split('(')[-1].replace(')', ''),
+                                "Nombre_Vecino": vecino_sel.split('(')[0],
+                                "Estado": voto_estado,
+                                "Observaciones": comentario
+                            }
+                            if enviar_a_google_sheets(datos_finales):
+                                st.balloons()
+                                st.success("¡Voto registrado correctamente!")
+                            else:
+                                st.error("Error al guardar. Verificá la conexión.")
+            else:
+                st.error("No se encontraron resultados.")
 
-    if st.button("CERRAR SESIÓN"):
+    if st.button("SALIR DEL SISTEMA"):
         st.session_state.autenticado = False
         st.rerun()
