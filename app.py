@@ -45,31 +45,39 @@ def enviar_a_google_sheets(datos):
 # --- SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "Militante"
+if "nombre_referente" not in st.session_state: st.session_state.nombre_referente = ""
 
-# --- ACCESO ---
+# --- PANTALLA DE ACCESO ---
 if not st.session_state.autenticado:
     st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
     st.markdown('<div class="aviso-seguridad">⚠️ REGISTRO DE UBICACIÓN ACTIVO PARA SEGURIDAD</div>', unsafe_allow_html=True)
     
     acepta_geo = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN E IP")
+    
+    # NUEVO CAMPO: Nombre del Referente
+    ref_ing = st.text_input("NOMBRE DEL REFERENTE / RESPONSABLE:", placeholder="Ej: Juan Pérez").upper()
+    
     usuario_ing = st.selectbox("LOCALIDAD / EQUIPO:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
     clave_ing = st.text_input("CONTRASEÑA TÁCTICA:", type="password")
     
-    if st.button("ACCEDER AL PADRÓN", disabled=not acepta_geo):
+    if st.button("ACCEDER AL PADRÓN", disabled=not acepta_geo or not ref_ing):
         if clave_ing == CLAVE_ADMIN or (usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing):
             st.session_state.autenticado = True
             st.session_state.usuario_actual = usuario_ing if clave_ing != CLAVE_ADMIN else "ADMIN"
+            st.session_state.nombre_referente = ref_ing
             st.rerun()
         else:
             st.error("CREDENCIALES INCORRECTAS")
+    if not ref_ing and acepta_geo:
+        st.info("Por favor, ingresá el nombre del Referente para habilitar el ingreso.")
 
+# --- PANTALLA OPERATIVA ---
 else:
-    st.markdown(f'<div class="bienvenida">OPERATIVO: {st.session_state.usuario_actual}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="bienvenida">OPERATIVO: {st.session_state.usuario_actual} | REF: {st.session_state.nombre_referente}</div>', unsafe_allow_html=True)
 
     @st.cache_data
     def cargar_padron():
         try:
-            # Blindaje contra errores de fila en el CSV
             df = pd.read_csv("datos.csv", encoding='latin-1', on_bad_lines='skip', sep=None, engine='python').fillna('')
             df.columns = [c.upper().strip() for c in df.columns]
             return df
@@ -92,22 +100,20 @@ else:
                 st.markdown("---")
                 st.markdown("### 🗳️ REGISTRAR COMPROMISO")
                 
-                # Identificar columnas automáticamente
                 cols = resultado.columns
                 c_dni = [c for c in cols if any(x in c for x in ['DNI', 'MATRI', 'DOC'])][0]
                 c_ape = [c for c in cols if 'APE' in c]
                 c_nom = [c for c in cols if 'NOM' in c]
                 
-                # Armamos el diccionario único de esta búsqueda
                 opciones_vecinos = {}
                 for idx, row in resultado.iterrows():
-                    # Usamos el DNI como parte de la clave para que no se repitan familiares
+                    # Clave única por DNI para diferenciar familiares
                     label = f"{row[c_ape[0]] if c_ape else ''}, {row[c_nom[0]] if c_nom else ''} | DNI: {row[c_dni]}"
                     opciones_vecinos[label] = row
                 
                 seleccionado = st.selectbox("Seleccionar Vecino específico:", list(opciones_vecinos.keys()))
                 
-                # Al cambiar la persona, el "key" del form cambia y se resetea todo
+                # Reiniciamos el formulario por cada persona seleccionada
                 with st.form(key=f"form_{seleccionado}"):
                     voto = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS"], horizontal=True)
                     nota = st.text_input("Notas de la visita:")
@@ -118,6 +124,7 @@ else:
 
                         datos_api = {
                             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            "Referente": st.session_state.nombre_referente, # NUEVO DATO
                             "Militante": st.session_state.usuario_actual,
                             "DNI_Vecino": str(vecino_datos[c_dni]),
                             "Nombre_Vecino": nombre_full,
@@ -127,12 +134,13 @@ else:
                         
                         if enviar_a_google_sheets(datos_api):
                             st.balloons()
-                            st.success(f"¡Registrado con éxito: {nombre_full}!")
+                            st.success(f"¡Registrado! Vecino: {nombre_full} | Referente: {st.session_state.nombre_referente}")
                         else:
-                            st.error("Error al guardar. Revisa la base de datos.")
+                            st.error("Error al guardar. Revisa la base central.")
             else:
                 st.warning("Sin coincidencias.")
 
     if st.button("CERRAR SESIÓN"):
-        st.session_state.autenticado = False
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
