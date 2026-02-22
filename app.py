@@ -26,7 +26,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Intentamos cargar el banner si existe en el repo
+# Intentamos cargar el banner con prioridad a banner.jpg
 if os.path.exists("banner.jpg"):
     st.image("banner.jpg", use_container_width=True)
 elif os.path.exists("banner.jpeg"):
@@ -36,7 +36,6 @@ elif os.path.exists("banner.jpeg"):
 def enviar_a_google_sheets(datos):
     try:
         url = st.secrets["URL_SHEET_BEST"]
-        # Corregido: Paréntesis cerrado y timeout para evitar cuelgues
         res = requests.post(url, json=datos, timeout=10)
         return res.status_code == 200
     except:
@@ -49,7 +48,6 @@ if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "
 # --- PANTALLA DE LOGUEO ---
 if not st.session_state.autenticado:
     st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
-    
     usuario_ing = st.selectbox("LOCALIDAD / EQUIPO:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
     clave_ing = st.text_input("CONTRASEÑA TÁCTICA:", type="password")
     
@@ -61,17 +59,4 @@ if not st.session_state.autenticado:
         elif usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing:
             st.session_state.autenticado = True
             st.session_state.usuario_actual = usuario_ing
-            st.rerun()
-        else:
-            st.error("CREDENCIALES INCORRECTAS")
-
-# --- PANTALLA OPERATIVA ---
-else:
-    st.markdown(f'<div class="bienvenida">OPERATIVO: {st.session_state.usuario_actual}</div>', unsafe_allow_html=True)
-
-    @st.cache_data
-    def cargar_padron():
-        try:
-            # Cargamos el archivo datos.csv que está en tu GitHub
-            df = pd.read_csv("datos.csv", encoding='latin-1').fillna('')
-            # Normalizamos nombres
+            st.rerun
