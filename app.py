@@ -5,143 +5,121 @@ import os
 from datetime import datetime
 import requests
 
-# 1. SEGURIDAD Y LOCALIDADES
+# 1. SEGURIDAD: LOCALIDADES
 USUARIOS_AUTORIZADOS = {
-    "CASEROS": "L4_3f_CAS", "CIUDADELA": "L4_3f_CIU", "BARRIO_EJERCITO": "L4_3f_BEJ",
-    "VILLA_BOSCH": "L4_3f_VBO", "MARTIN_CORONADO": "L4_3f_MCO", "CIUDAD_JARDIN": "L4_3f_CJA",
-    "SANTOS_LUGARES": "L4_3f_SLU", "SAENZ_PEÑA": "L4_3f_SPE", "PODESTA": "L4_3f_POD",
-    "CHURRUCA": "L4_3f_CHU", "EL_LIBERTADOR": "L4_3f_ELI", "LOMA_HERMOSA": "L4_3f_LHE"
+    "CASEROS": "L4_3f_CAS",
+    "CIUDADELA": "L4_3f_CIU",
+    "BARRIO_EJERCITO": "L4_3f_BEJ",
+    "VILLA_BOSCH": "L4_3f_VBO",
+    "MARTIN_CORONADO": "L4_3f_MCO",
+    "CIUDAD_JARDIN": "L4_3f_CJA",
+    "SANTOS_LUGARES": "L4_3f_SLU",
+    "SAENZ_PEÑA": "L4_3f_SPE",
+    "PODESTA": "L4_3f_POD",
+    "CHURRUCA": "L4_3f_CHU",
+    "EL_LIBERTADOR": "L4_3f_ELI",
+    "LOMA_HERMOSA": "L4_3f_LHE"
 }
 CLAVE_ADMIN = "josefina3f_admin"
 
-st.set_page_config(page_title="Lista 4 - Peronismo de Todos", page_icon="✌️", layout="centered")
+st.set_page_config(page_title="Lista 4 - Auditoría Total", page_icon="✌️", layout="centered")
 
-# --- DISEÑO ---
-st.markdown("""
-    <style>
-    .stApp { background-color: white; }
-    .bienvenida { text-align: center; color: white; background: #003366; padding: 20px; border: 3px solid black; font-weight: 900; font-size: 22px; margin-bottom: 20px; }
-    .stButton>button { background-color: #00008B !important; color: white !important; font-weight: 900 !important; border: 3px solid #FFD700 !important; width: 100%; height: 55px; }
-    .aviso-seguridad { background-color: #ffeb3b; padding: 10px; border: 2px solid #f44336; color: black; font-weight: bold; text-align: center; margin-bottom: 15px; }
-    label, p, h3 { color: black !important; font-weight: bold !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Banner
-if os.path.exists("banner.jpg"):
-    st.image("banner.jpg", use_container_width=True)
-elif os.path.exists("banner.jpeg"):
-    st.image("banner.jpeg", use_container_width=True)
-
-# --- FUNCIÓN DE ENVÍO ---
-def enviar_a_google_sheets(datos):
+# --- REGISTRO DE EVENTOS (LOG) ---
+def registrar_evento(usuario, accion, detalle):
+    archivo_log = "auditoria_completa.csv"
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    
+    # Intentamos obtener la IP del usuario
     try:
-        url = st.secrets["URL_SHEET_BEST"]
-        res = requests.post(url, json=datos, timeout=10)
-        return res.status_code == 200
+        ip = requests.get('https://api.ipify.org', timeout=2).text
     except:
-        return False
+        ip = "No detectada"
+        
+    nuevo_log = pd.DataFrame([{
+        "Fecha": ahora, 
+        "Usuario": usuario, 
+        "Accion": accion, 
+        "Detalle": detalle, 
+        "IP": ip
+    }])
+    
+    if not os.path.isfile(archivo_log):
+        nuevo_log.to_csv(archivo_log, index=False, encoding='utf-8')
+    else:
+        nuevo_log.to_csv(archivo_log, mode='a', header=False, index=False, encoding='utf-8')
 
 # --- SESIÓN ---
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
-if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "Militante"
-if "nombre_referente" not in st.session_state: st.session_state.nombre_referente = ""
+if "es_admin" not in st.session_state: st.session_state.es_admin = False
 
 # --- PANTALLA DE ACCESO ---
 if not st.session_state.autenticado:
-    st.markdown('<div class="bienvenida">INGRESO SEGURO - LISTA 4</div>', unsafe_allow_html=True)
-    st.markdown('<div class="aviso-seguridad">⚠️ REGISTRO DE UBICACIÓN ACTIVO PARA SEGURIDAD</div>', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center;'>✌️ LISTA 4 - INGRESO</h2>", unsafe_allow_html=True)
     
-    acepta_geo = st.checkbox("ACEPTO EL REGISTRO DE MI UBICACIÓN E IP")
+    acepta = st.checkbox("Acepto el registro de mi actividad por seguridad")
+    loc = st.selectbox("LOCALIDAD:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
+    pin = st.text_input("CLAVE:", type="password")
     
-    # Campo obligatorio de Referente
-    ref_ing = st.text_input("NOMBRE DEL REFERENTE / RESPONSABLE:", placeholder="Ej: JUAN PEREZ").upper()
-    
-    usuario_ing = st.selectbox("LOCALIDAD / EQUIPO:", ["---"] + list(USUARIOS_AUTORIZADOS.keys()))
-    clave_ing = st.text_input("CONTRASEÑA TÁCTICA:", type="password")
-    
-    if st.button("ACCEDER AL PADRÓN", disabled=not acepta_geo or not ref_ing):
-        if clave_ing == CLAVE_ADMIN or (usuario_ing in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[usuario_ing] == clave_ing):
+    if st.button("ACCEDER", disabled=not acepta):
+        if pin == CLAVE_ADMIN:
             st.session_state.autenticado = True
-            st.session_state.usuario_actual = usuario_ing if clave_ing != CLAVE_ADMIN else "ADMIN"
-            st.session_state.nombre_referente = ref_ing
+            st.session_state.es_admin = True
+            registrar_evento("ADMIN", "INGRESO", "Entró al Panel de Control")
+            st.rerun()
+        elif loc in USUARIOS_AUTORIZADOS and USUARIOS_AUTORIZADOS[loc] == pin:
+            st.session_state.autenticado = True
+            st.session_state.usuario_actual = loc
+            registrar_evento(loc, "INGRESO", "Sesión iniciada")
             st.rerun()
         else:
-            st.error("CREDENCIALES INCORRECTAS")
-    if acepta_geo and not ref_ing:
-        st.info("Por favor, ingresá el nombre del Referente para continuar.")
+            st.error("Datos incorrectos")
 
-# --- PANTALLA OPERATIVA ---
 else:
-    st.markdown(f'<div class="bienvenida">OPERATIVO: {st.session_state.usuario_actual} | REF: {st.session_state.nombre_referente}</div>', unsafe_allow_html=True)
+    # --- PANEL DE ADMINISTRADOR ---
+    if st.session_state.es_admin:
+        st.markdown("### 🛡️ PANEL DE CONTROL DE INGRESOS Y CONSULTAS")
+        if os.path.exists("auditoria_completa.csv"):
+            log_data = pd.read_csv("auditoria_completa.csv")
+            st.dataframe(log_data.sort_index(ascending=False), use_container_width=True)
+            if st.button("Limpiar historial (Solo Admin)"):
+                os.remove("auditoria_completa.csv")
+                st.rerun()
+        else:
+            st.info("No hay ingresos registrados todavía.")
 
+    # --- BUSCADOR ---
+    st.markdown("---")
+    st.markdown("### 🔎 CONSULTA DE PADRÓN")
+    
     @st.cache_data
-    def cargar_padron():
+    def cargar_datos():
         try:
-            df = pd.read_csv("datos.csv", encoding='latin-1', on_bad_lines='skip', sep=None, engine='python').fillna('')
-            df.columns = [c.upper().strip() for c in df.columns]
-            return df
-        except:
-            return None
+            df = pd.read_csv("datos.csv", sep=None, engine='python', encoding='latin-1')
+            # Solo columnas básicas: DNI, Nombre, Apellido, Dirección
+            visibles = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'MATRICULA', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'CALLE'])]
+            return df[visibles].fillna('')
+        except: return None
 
-    padron = cargar_padron()
+    padron = cargar_datos()
 
     if padron is not None:
-        st.markdown("### 🔎 LOCALIZAR AFILIADO")
-        busqueda = st.text_input("Ingresá Apellido o DNI:").upper()
-        
+        busqueda = st.text_input("Buscá por Apellido, DNI o Calle:")
         if busqueda:
-            resultado = padron[padron.astype(str).apply(lambda x: x.str.upper().str.contains(busqueda)).any(axis=1)]
+            # REGISTRAR LA BÚSQUEDA
+            user_log = "ADMIN" if st.session_state.es_admin else st.session_state.usuario_actual
+            registrar_evento(user_log, "BÚSQUEDA", busqueda)
             
-            if not resultado.empty:
-                st.success(f"Se encontraron {len(resultado)} coincidencias")
-                st.dataframe(resultado.head(20), use_container_width=True)
-                
-                st.markdown("---")
-                st.markdown("### 🗳️ REGISTRAR COMPROMISO")
-                
-                cols = resultado.columns
-                c_dni = [c for c in cols if any(x in c for x in ['DNI', 'MATRI', 'DOC'])][0]
-                c_ape = [c for c in cols if 'APE' in c]
-                c_nom = [c for c in cols if 'NOM' in c]
-                
-                opciones_vecinos = {}
-                for idx, row in resultado.iterrows():
-                    label = f"{row[c_ape[0]] if c_ape else ''}, {row[c_nom[0]] if c_nom else ''} | DNI: {row[c_dni]}"
-                    opciones_vecinos[label] = row
-                
-                seleccionado = st.selectbox("Seleccionar Vecino específico:", list(opciones_vecinos.keys()))
-                
-                with st.form(key=f"form_{seleccionado}"):
-                    voto = st.radio("Intención de Voto:", ["🟢 SEGURO LISTA 4", "🟡 INDECISO / VOLVER", "🔴 OTROS"], horizontal=True)
-                    nota = st.text_input("Notas de la visita:")
-                    
-                    if st.form_submit_button("GUARDAR EN GOOGLE SHEETS"):
-                        vecino_datos = opciones_vecinos[seleccionado]
-                        nombre_full = f"{vecino_datos[c_ape[0]]}, {vecino_datos[c_nom[0]]}" if c_ape and c_nom else seleccionado.split('|')[0].strip()
-
-                        # ENVIAMOS LOS DATOS CON AMBAS VERSIONES PARA QUE NO FALLE
-                        datos_api = {
-                            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                            "Referente": st.session_state.nombre_referente,
-                            "REFERENTE": st.session_state.nombre_referente, # AGREGADO PARA TU EXCEL EN MAYÚSCULAS
-                            "Militante": st.session_state.usuario_actual,
-                            "DNI_Vecino": str(vecino_datos[c_dni]),
-                            "Nombre_Vecino": nombre_full,
-                            "Estado": voto,
-                            "Observaciones": nota
-                        }
-                        
-                        if enviar_a_google_sheets(datos_api):
-                            st.balloons()
-                            st.success(f"¡Registrado! Vecino: {nombre_full}")
-                        else:
-                            st.error("Error al guardar. Revisa la base de datos.")
+            # FILTRAR
+            termino = busqueda.upper()
+            mask = padron.astype(str).apply(lambda row: row.str.upper().str.contains(termino)).any(axis=1)
+            res = padron[mask]
+            
+            if not res.empty:
+                st.success(f"Resultados: {len(res)}")
+                st.dataframe(res, use_container_width=True)
             else:
-                st.warning("Sin coincidencias.")
+                st.warning("No se encontraron resultados.")
 
-    if st.button("CERRAR SESIÓN"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+    if st.button("SALIR"):
+        st.session_state.autenticado = False
         st.rerun()
-
