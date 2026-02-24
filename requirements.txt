@@ -1,4 +1,3 @@
-Plaintext
 pandas
 st-gsheets-connection
 requests
