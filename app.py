@@ -48,18 +48,40 @@ if not st.session_state.autenticado:
             st.session_state.autenticado, st.session_state.nombre, st.session_state.localidad, st.session_state.es_admin = True, nombre_m, loc_sel, False
             registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
             st.rerun()
-        # LÍNEA 54 CORREGIDA AQUÍ:
         else:
             st.error("DATOS INCORRECTOS")
 
 else:
-    # --- BUSCADOR HABILITADO ---
+    # --- PANTALLA DE CONSULTA ---
     st.markdown(f"### Compañerx: **{st.session_state.nombre}** | Localidad: **{st.session_state.localidad}**")
     
     @st.cache_data
     def cargar_datos():
         archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
+        if not os.path.exists(archivo):
+            return None
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
                 df = pd.read_csv(archivo, encoding=enc, sep=None, engine='python')
-                visibles =
+                # LÍNEA 65 CORREGIDA:
+                columnas_buscadas = ['DNI', 'MATRICULA', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'CALLE']
+                visibles = [c for c in df.columns if any(x in c.upper() for x in columnas_buscadas)]
+                return df[visibles].fillna('')
+            except: continue
+        return None
+
+    df_padron = cargar_datos()
+    if df_padron is not None:
+        busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
+        if busqueda:
+            t = busqueda.upper()
+            mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
+            res = df_padron[mask]
+            if not res.empty:
+                registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
+                st.dataframe(res, use_container_width=True)
+            else: st.warning("No se encontraron resultados.")
+
+    if st.button("SALIR"):
+        st.session_state.autenticado = False
+        st.rerun()
