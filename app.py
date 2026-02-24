@@ -17,7 +17,7 @@ CLAVE_ADMIN = "josefina3f_admin"
 
 st.set_page_config(page_title="Lista 4 - Padrón 3F", page_icon="✌️", layout="centered")
 
-# --- CONEXIÓN A GOOGLE SHEETS ---
+# --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
@@ -58,35 +58,42 @@ if not st.session_state.autenticado:
             st.rerun()
         else: st.error("DATOS INCORRECTOS")
 else:
-    # --- PANEL DE BÚSQUEDA (CORREGIDO PARA QUE NO DESAPAREZCA) ---
+    # --- PANEL DE BÚSQUEDA ---
     st.markdown('<div class="banner"><h3>CONSULTA DE AFILIADOS - LISTA 4</h3></div>', unsafe_allow_html=True)
     st.write(f"**Compañerx:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
     
-    # El buscador ahora está FUERA de la función de carga para asegurar que se vea
     busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
     
     @st.cache_data
-    def cargar_datos():
-        archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
-        if not os.path.exists(archivo):
-            st.error(f"Archivo no encontrado: {archivo}")
+    def cargar_datos_forzado():
+        # BUSCADOR INTELIGENTE: Ignora archivos viejos y busca el de 2026
+        archivos = [f for f in os.listdir('.') if f.startswith('Padron 2026') and f.endswith('.csv')]
+        
+        if not archivos:
+            st.error("No se encontró el archivo 'Padron 2026' en GitHub. Verificá el nombre.")
             return None
+            
+        archivo_objetivo = archivos[0] # Forzamos el primero que coincida con 2026
+        
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
-                df = pd.read_csv(archivo, encoding=enc, sep=None, engine='python')
-                columnas = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'NOMBRE', 'APELLIDO', 'CALLE', 'DIRECCION'])]
-                return df[columnas].fillna('')
+                df = pd.read_csv(archivo_objetivo, encoding=enc, sep=None, engine='python')
+                # Filtramos columnas para que no pese tanto la app
+                cols = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'NOMBRE', 'APELLIDO', 'CALLE', 'DIRECCION'])]
+                return df[cols].fillna('')
             except: continue
         return None
 
     if busqueda:
-        df_padron = cargar_datos()
+        df_padron = cargar_datos_forzado()
         if df_padron is not None:
             t = busqueda.upper()
+            # Búsqueda universal: barre todas las columnas incluyendo la calle
             mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
             res = df_padron[mask]
             if not res.empty:
                 registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
+                st.success(f"Resultados: {len(res)}")
                 st.dataframe(res, use_container_width=True)
             else: st.warning("No se encontraron resultados.")
 
