@@ -15,23 +15,24 @@ LOCALIDADES_CLAVES = {
 }
 CLAVE_ADMIN = "josefina3f_admin"
 
-st.set_page_config(page_title="Lista 4 - Gestión", page_icon="✌️", layout="wide")
+st.set_page_config(page_title="Lista 4 - Gestión Territorial", page_icon="✌️", layout="wide")
 
-# --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
+# --- CONEXIÓN A GOOGLE SHEETS (CON MANEJO DE ERRORES) ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
-    st.error("Error de conexión a la planilla de auditoría.")
+    conn = None
 
 def registrar_evento(nombre, localidad, accion, detalle):
-    try:
-        ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        ip = requests.get('https://api.ipify.org', timeout=2).text
-        nueva_fila = pd.DataFrame([{"Fecha": ahora, "Usuario": nombre, "Célula/Localidad": localidad, "Acción": accion, "Término Buscado": detalle, "Ubicación (IP)": ip}])
-        df_existente = conn.read(worksheet="resultados")
-        df_actualizado = pd.concat([df_existente, nueva_fila], ignore_index=True)
-        conn.update(worksheet="resultados", data=df_actualizado)
-    except: pass 
+    if conn is not None:
+        try:
+            ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            ip = requests.get('https://api.ipify.org', timeout=2).text
+            nueva_fila = pd.DataFrame([{"Fecha": ahora, "Usuario": nombre, "Célula/Localidad": localidad, "Acción": accion, "Término Buscado": detalle, "Ubicación (IP)": ip}])
+            df_existente = conn.read(worksheet="resultados")
+            df_actualizado = pd.concat([df_existente, nueva_fila], ignore_index=True)
+            conn.update(worksheet="resultados", data=df_actualizado)
+        except: pass 
 
 # --- DISEÑO ---
 st.markdown("""<style>
@@ -50,53 +51,46 @@ if not st.session_state.autenticado:
     pin = st.text_input("CLAVE DE ACCESO:", type="password")
     
     if st.button("INGRESAR", disabled=not acepta_gps):
-        if pin == CLAVE_ADMIN:
+        if pin == CLAVE_ADMIN or (loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != ""):
             st.session_state.autenticado = True
-            st.session_state.es_admin = True
+            st.session_state.es_admin = (pin == CLAVE_ADMIN)
             st.session_state.nombre = nombre_m if nombre_m else "ADMIN"
-            st.session_state.localidad = "ADMIN"
-            registrar_evento(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
-            st.rerun()
-        elif loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != "":
-            st.session_state.autenticado = True
-            st.session_state.es_admin = False
-            st.session_state.nombre = nombre_m
-            st.session_state.localidad = loc_sel
-            registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
+            st.session_state.localidad = loc_sel if pin != CLAVE_ADMIN else "ADMIN"
+            registrar_evento(st.session_state.nombre, st.session_state.localidad, "INGRESO", "Inicio")
             st.rerun()
         else: st.error("DATOS INCORRECTOS")
 else:
-    # --- PANEL PARA ADMINISTRADORES (AUDITORÍA) ---
+    # --- PANEL PARA ADMIN ---
     if st.session_state.get('es_admin', False):
         st.markdown("## 📊 PANEL DE CONTROL - AUDITORÍA")
-        try:
-            df_auditoria = conn.read(worksheet="resultados")
-            st.dataframe(df_auditoria.sort_index(ascending=False), use_container_width=True)
-            if st.button("ACTUALIZAR AUDITORÍA"): st.rerun()
-        except:
-            st.warning("No se pudo cargar la planilla de resultados.")
+        if conn is not None:
+            try:
+                df_auditoria = conn.read(worksheet="resultados")
+                st.dataframe(df_auditoria.sort_index(ascending=False), use_container_width=True)
+            except: st.warning("Planilla de resultados no disponible momentáneamente.")
+        else: st.error("No hay conexión con Google Sheets.")
 
-    # --- BUSCADOR GENERAL ---
+    # --- BUSCADOR ---
     st.markdown('<div class="banner"><h3>CONSULTA DE AFILIADOS - LISTA 4</h3></div>', unsafe_allow_html=True)
     st.write(f"**Usuario:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
     
     busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
     
     @st.cache_data
-    def cargar_datos_inteligente():
+    def cargar_datos_final():
+        # Busca cualquier archivo que empiece con 'Padron 2026'
         archivos = [f for f in os.listdir('.') if f.startswith('Padron 2026') and f.endswith('.csv')]
         if not archivos: return None
-        archivo_objetivo = archivos[0]
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
-                df = pd.read_csv(archivo_objetivo, encoding=enc, sep=None, engine='python')
+                df = pd.read_csv(archivos[0], encoding=enc, sep=None, engine='python')
                 cols = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'NOMBRE', 'APELLIDO', 'CALLE', 'DIRECCION'])]
                 return df[cols].fillna('')
             except: continue
         return None
 
     if busqueda:
-        df_padron = cargar_datos_inteligente()
+        df_padron = cargar_datos_final()
         if df_padron is not None:
             t = busqueda.upper()
             mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
