@@ -18,10 +18,7 @@ CLAVE_ADMIN = "josefina3f_admin"
 st.set_page_config(page_title="Lista 4 - Padrón 3F", page_icon="✌️", layout="centered")
 
 # --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    st.error("Error de conexión a la planilla. Verifica los Secrets.")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 def registrar_evento(nombre, localidad, accion, detalle):
     try:
@@ -51,4 +48,18 @@ if not st.session_state.autenticado:
             st.session_state.autenticado, st.session_state.nombre, st.session_state.localidad, st.session_state.es_admin = True, nombre_m, loc_sel, False
             registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
             st.rerun()
-        else: st.error("DAT
+        # LÍNEA 54 CORREGIDA AQUÍ:
+        else:
+            st.error("DATOS INCORRECTOS")
+
+else:
+    # --- BUSCADOR HABILITADO ---
+    st.markdown(f"### Compañerx: **{st.session_state.nombre}** | Localidad: **{st.session_state.localidad}**")
+    
+    @st.cache_data
+    def cargar_datos():
+        archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
+        for enc in ['latin-1', 'cp1252', 'utf-8']:
+            try:
+                df = pd.read_csv(archivo, encoding=enc, sep=None, engine='python')
+                visibles =
