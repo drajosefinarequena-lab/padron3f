@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 import os
 
-# 1. SEGURIDAD: LOCALIDADES Y CLAVES 2026
+# 1. CLAVES 2026 POR LOCALIDAD
 LOCALIDADES_CLAVES = {
     "CASEROS": "caseros2026", "CIUDADELA": "ciudadela2026", "BARRIO_EJERCITO": "barrioejercito2026",
     "VILLA_BOSCH": "villabosch2026", "MARTIN_CORONADO": "martincoronado2026", "CIUDAD_JARDIN": "ciudadjardin2026",
@@ -15,15 +15,12 @@ LOCALIDADES_CLAVES = {
 }
 CLAVE_ADMIN = "josefina3f_admin"
 
-st.set_page_config(page_title="Lista 4 - Peronismo de Todos", page_icon="✌️", layout="centered")
+st.set_page_config(page_title="Lista 4 - Ingreso", page_icon="✌️", layout="centered")
 
-# --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    st.error("Error de conexión a la planilla. Verifica los Secrets de Streamlit.")
+# --- CONEXIÓN A GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-def registrar_evento(nombre, localidad, accion, detalle):
+def registrar_auditoria(nombre, localidad, accion, detalle):
     try:
         ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         ip = requests.get('https://api.ipify.org', timeout=2).text
@@ -31,43 +28,37 @@ def registrar_evento(nombre, localidad, accion, detalle):
         df_existente = conn.read(worksheet="resultados")
         df_actualizado = pd.concat([df_existente, nueva_fila], ignore_index=True)
         conn.update(worksheet="resultados", data=df_actualizado)
-    except:
-        pass 
+    except: pass 
 
-# --- DISEÑO ---
-st.markdown("""<style>
-    .stApp { background-color: white; }
-    .banner { text-align: center; background: #003366; color: white; padding: 15px; border-radius: 10px; border-bottom: 5px solid #FFD700; margin-bottom: 20px; }
-    .stButton>button { background-color: #003366 !important; color: white !important; border: 2px solid #FFD700 !important; width: 100%; font-weight: bold; }
-    label { color: black !important; font-weight: bold !important; }
-</style>""", unsafe_allow_html=True)
+# --- INTERFAZ DE LA IMAGEN ---
+st.markdown("<h1 style='text-align:center;'>✌️ LISTA 4 - INGRESO</h1>", unsafe_allow_html=True)
 
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    st.markdown('<div class="banner"><h1>✌️ LISTA 4</h1><h3>PERONISMO DE TODOS - 3F</h3></div>', unsafe_allow_html=True)
-    nombre_m = st.text_input("TU NOMBRE Y APELLIDO:")
+    acepta = st.checkbox("Acepto el registro de mi actividad por seguridad")
+    nombre_m = st.text_input("NOMBRE Y APELLIDO:")
     loc_sel = st.selectbox("LOCALIDAD:", ["---"] + list(LOCALIDADES_CLAVES.keys()))
-    pin = st.text_input("CLAVE DE ACCESO:", type="password")
+    pin = st.text_input("CLAVE:", type="password")
     
-    if st.button("INGRESAR"):
+    if st.button("ACCEDER", disabled=not acepta):
         if pin == CLAVE_ADMIN:
             st.session_state.autenticado, st.session_state.es_admin, st.session_state.nombre, st.session_state.localidad = True, True, (nombre_m if nombre_m else "ADMIN"), "ADMIN"
-            registrar_evento(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
+            registrar_auditoria(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
             st.rerun()
         elif loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != "":
             st.session_state.autenticado, st.session_state.nombre, st.session_state.localidad, st.session_state.es_admin = True, nombre_m, loc_sel, False
-            registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
+            registrar_auditoria(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
             st.rerun()
         else:
-            st.error("DATOS INCORRECTOS O NOMBRE VACÍO")
+            st.error("Datos incorrectos o falta completar el nombre")
+
 else:
-    # --- PANTALLA DE CONSULTA ---
-    st.markdown(f"### BienvenidX CompañerX {st.session_state.nombre}")
+    # --- BUSCADOR UNIVERSAL (APELLIDO, DNI Y CALLES) ---
+    st.write(f"Compañerx: **{st.session_state.nombre}** | Localidad: **{st.session_state.localidad}**")
     
     @st.cache_data
     def cargar_datos():
-        # Cargamos el archivo con el nombre largo exacto
         archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
@@ -77,21 +68,18 @@ else:
             except: continue
         return None
 
-    df_padron = cargar_datos()
-    if df_padron is not None:
+    padron = cargar_datos()
+    if padron is not None:
         busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
         if busqueda:
             t = busqueda.upper()
-            mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
-            resultados = df_padron[mask]
-            
-            if not resultados.empty:
-                registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
-                st.success(f"Resultados encontrados: {len(resultados)}")
-                st.dataframe(resultados, use_container_width=True)
-            else:
-                st.warning("No se encontraron resultados.")
+            mask = padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
+            res = padron[mask]
+            if not res.empty:
+                registrar_auditoria(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
+                st.dataframe(res, use_container_width=True)
+            else: st.warning("No se encontraron resultados.")
 
-    if st.button("CERRAR SESIÓN"):
+    if st.button("SALIR"):
         st.session_state.autenticado = False
         st.rerun()
