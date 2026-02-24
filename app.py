@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 import os
 
-# 1. SEGURIDAD: LOCALIDADES Y CLAVES 2026
+# 1. SEGURIDAD Y CLAVES 2026
 LOCALIDADES_CLAVES = {
     "CASEROS": "caseros2026", "CIUDADELA": "ciudadela2026", "BARRIO_EJERCITO": "barrioejercito2026",
     "VILLA_BOSCH": "villabosch2026", "MARTIN_CORONADO": "martincoronado2026", "CIUDAD_JARDIN": "ciudadjardin2026",
@@ -17,8 +17,11 @@ CLAVE_ADMIN = "josefina3f_admin"
 
 st.set_page_config(page_title="Lista 4 - Padrón 3F", page_icon="✌️", layout="centered")
 
-# --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- CONEXIÓN A GOOGLE SHEETS ---
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception:
+    st.error("Error de conexión. Verifica los Secrets de Streamlit.")
 
 def registrar_evento(nombre, localidad, accion, detalle):
     try:
@@ -30,16 +33,27 @@ def registrar_evento(nombre, localidad, accion, detalle):
         conn.update(worksheet="resultados", data=df_actualizado)
     except: pass 
 
-# --- PANTALLA DE ACCESO ---
+# --- DISEÑO LISTA 4 ---
+st.markdown("""<style>
+    .stApp { background-color: white; }
+    .banner { text-align: center; background: #003366; color: white; padding: 15px; border-radius: 10px; border-bottom: 5px solid #FFD700; margin-bottom: 20px; }
+    .stButton>button { background-color: #003366 !important; color: white !important; border: 2px solid #FFD700 !important; width: 100%; font-weight: bold; }
+</style>""", unsafe_allow_html=True)
+
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    st.markdown("<h1 style='text-align:center;'>✌️ LISTA 4 - INGRESO</h1>", unsafe_allow_html=True)
+    # --- PANTALLA DE INGRESO RESTAURADA ---
+    st.markdown('<div class="banner"><h1>✌️ LISTA 4</h1><h3>PERONISMO DE TODOS - 3F</h3></div>', unsafe_allow_html=True)
+    
+    # Checkbox de seguridad solicitado
+    acepta_gps = st.checkbox("ACEPTO EL REGISTRO DE MI LOCALIZACIÓN POR SEGURIDAD")
+    
     nombre_m = st.text_input("TU NOMBRE Y APELLIDO:")
     loc_sel = st.selectbox("LOCALIDAD:", ["---"] + list(LOCALIDADES_CLAVES.keys()))
-    pin = st.text_input("CLAVE:", type="password")
+    pin = st.text_input("CLAVE DE ACCESO:", type="password")
     
-    if st.button("ACCEDER"):
+    if st.button("INGRESAR", disabled=not acepta_gps):
         if pin == CLAVE_ADMIN:
             st.session_state.autenticado, st.session_state.es_admin, st.session_state.nombre, st.session_state.localidad = True, True, (nombre_m if nombre_m else "ADMIN"), "ADMIN"
             registrar_evento(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
@@ -49,29 +63,26 @@ if not st.session_state.autenticado:
             registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
             st.rerun()
         else:
-            st.error("DATOS INCORRECTOS")
-
+            st.error("DATOS INCORRECTOS O NOMBRE VACÍO")
 else:
-    # --- PANTALLA DE CONSULTA ---
-    st.markdown(f"### Compañerx: **{st.session_state.nombre}** | Localidad: **{st.session_state.localidad}**")
+    # --- PANTALLA DE CONSULTA RESTAURADA ---
+    st.markdown('<div class="banner"><h3>CONSULTA DE AFILIADOS - LISTA 4</h3></div>', unsafe_allow_html=True)
+    st.write(f"**Compañerx:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
     
     @st.cache_data
     def cargar_datos():
         archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
-        if not os.path.exists(archivo):
-            return None
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
                 df = pd.read_csv(archivo, encoding=enc, sep=None, engine='python')
-                # LÍNEA 65 CORREGIDA:
-                columnas_buscadas = ['DNI', 'MATRICULA', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'CALLE']
-                visibles = [c for c in df.columns if any(x in c.upper() for x in columnas_buscadas)]
+                visibles = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'MATRICULA', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'CALLE'])]
                 return df[visibles].fillna('')
             except: continue
         return None
 
     df_padron = cargar_datos()
     if df_padron is not None:
+        # Recuperamos el panel de búsqueda
         busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
         if busqueda:
             t = busqueda.upper()
@@ -79,9 +90,10 @@ else:
             res = df_padron[mask]
             if not res.empty:
                 registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
+                st.success(f"Resultados: {len(res)}")
                 st.dataframe(res, use_container_width=True)
             else: st.warning("No se encontraron resultados.")
 
-    if st.button("SALIR"):
+    if st.button("CERRAR SESIÓN"):
         st.session_state.autenticado = False
         st.rerun()
