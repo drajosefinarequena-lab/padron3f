@@ -15,13 +15,13 @@ LOCALIDADES_CLAVES = {
 }
 CLAVE_ADMIN = "josefina3f_admin"
 
-st.set_page_config(page_title="Lista 4 - Padrón 3F", page_icon="✌️", layout="centered")
+st.set_page_config(page_title="Lista 4 - Gestión", page_icon="✌️", layout="wide")
 
 # --- CONEXIÓN A GOOGLE SHEETS PARA AUDITORÍA ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
-    st.error("Error de conexión a la auditoría.")
+    st.error("Error de conexión a la planilla de auditoría.")
 
 def registrar_evento(nombre, localidad, accion, detalle):
     try:
@@ -50,50 +50,59 @@ if not st.session_state.autenticado:
     pin = st.text_input("CLAVE DE ACCESO:", type="password")
     
     if st.button("INGRESAR", disabled=not acepta_gps):
-        if pin == CLAVE_ADMIN or (loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != ""):
+        if pin == CLAVE_ADMIN:
             st.session_state.autenticado = True
+            st.session_state.es_admin = True
             st.session_state.nombre = nombre_m if nombre_m else "ADMIN"
-            st.session_state.localidad = loc_sel if pin != CLAVE_ADMIN else "ADMIN"
-            registrar_evento(st.session_state.nombre, st.session_state.localidad, "INGRESO", "Sesión iniciada")
+            st.session_state.localidad = "ADMIN"
+            registrar_evento(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
+            st.rerun()
+        elif loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != "":
+            st.session_state.autenticado = True
+            st.session_state.es_admin = False
+            st.session_state.nombre = nombre_m
+            st.session_state.localidad = loc_sel
+            registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
             st.rerun()
         else: st.error("DATOS INCORRECTOS")
 else:
-    # --- PANEL DE BÚSQUEDA ---
+    # --- PANEL PARA ADMINISTRADORES (AUDITORÍA) ---
+    if st.session_state.get('es_admin', False):
+        st.markdown("## 📊 PANEL DE CONTROL - AUDITORÍA")
+        try:
+            df_auditoria = conn.read(worksheet="resultados")
+            st.dataframe(df_auditoria.sort_index(ascending=False), use_container_width=True)
+            if st.button("ACTUALIZAR AUDITORÍA"): st.rerun()
+        except:
+            st.warning("No se pudo cargar la planilla de resultados.")
+
+    # --- BUSCADOR GENERAL ---
     st.markdown('<div class="banner"><h3>CONSULTA DE AFILIADOS - LISTA 4</h3></div>', unsafe_allow_html=True)
-    st.write(f"**Compañerx:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
+    st.write(f"**Usuario:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
     
     busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
     
     @st.cache_data
-    def cargar_datos_forzado():
-        # BUSCADOR INTELIGENTE: Ignora archivos viejos y busca el de 2026
+    def cargar_datos_inteligente():
         archivos = [f for f in os.listdir('.') if f.startswith('Padron 2026') and f.endswith('.csv')]
-        
-        if not archivos:
-            st.error("No se encontró el archivo 'Padron 2026' en GitHub. Verificá el nombre.")
-            return None
-            
-        archivo_objetivo = archivos[0] # Forzamos el primero que coincida con 2026
-        
+        if not archivos: return None
+        archivo_objetivo = archivos[0]
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
                 df = pd.read_csv(archivo_objetivo, encoding=enc, sep=None, engine='python')
-                # Filtramos columnas para que no pese tanto la app
                 cols = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'NOMBRE', 'APELLIDO', 'CALLE', 'DIRECCION'])]
                 return df[cols].fillna('')
             except: continue
         return None
 
     if busqueda:
-        df_padron = cargar_datos_forzado()
+        df_padron = cargar_datos_inteligente()
         if df_padron is not None:
             t = busqueda.upper()
-            # Búsqueda universal: barre todas las columnas incluyendo la calle
             mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
             res = df_padron[mask]
             if not res.empty:
                 registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
-                st.success(f"Resultados: {len(res)}")
                 st.dataframe(res, use_container_width=True)
             else: st.warning("No se encontraron resultados.")
 
