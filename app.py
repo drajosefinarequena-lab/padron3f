@@ -21,7 +21,7 @@ st.set_page_config(page_title="Lista 4 - Padrón 3F", page_icon="✌️", layout
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
-    st.error("Error de conexión. Verifica los Secrets de Streamlit.")
+    st.error("Error de conexión a la auditoría.")
 
 def registrar_evento(nombre, localidad, accion, detalle):
     try:
@@ -33,7 +33,7 @@ def registrar_evento(nombre, localidad, accion, detalle):
         conn.update(worksheet="resultados", data=df_actualizado)
     except: pass 
 
-# --- DISEÑO LISTA 4 ---
+# --- DISEÑO ---
 st.markdown("""<style>
     .stApp { background-color: white; }
     .banner { text-align: center; background: #003366; color: white; padding: 15px; border-radius: 10px; border-bottom: 5px solid #FFD700; margin-bottom: 20px; }
@@ -43,54 +43,50 @@ st.markdown("""<style>
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    # --- PANTALLA DE INGRESO RESTAURADA ---
     st.markdown('<div class="banner"><h1>✌️ LISTA 4</h1><h3>PERONISMO DE TODOS - 3F</h3></div>', unsafe_allow_html=True)
-    
-    # Checkbox de seguridad solicitado
     acepta_gps = st.checkbox("ACEPTO EL REGISTRO DE MI LOCALIZACIÓN POR SEGURIDAD")
-    
     nombre_m = st.text_input("TU NOMBRE Y APELLIDO:")
     loc_sel = st.selectbox("LOCALIDAD:", ["---"] + list(LOCALIDADES_CLAVES.keys()))
     pin = st.text_input("CLAVE DE ACCESO:", type="password")
     
     if st.button("INGRESAR", disabled=not acepta_gps):
-        if pin == CLAVE_ADMIN:
-            st.session_state.autenticado, st.session_state.es_admin, st.session_state.nombre, st.session_state.localidad = True, True, (nombre_m if nombre_m else "ADMIN"), "ADMIN"
-            registrar_evento(st.session_state.nombre, "ADMIN", "INGRESO", "Panel Admin")
+        if pin == CLAVE_ADMIN or (loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != ""):
+            st.session_state.autenticado = True
+            st.session_state.nombre = nombre_m if nombre_m else "ADMIN"
+            st.session_state.localidad = loc_sel if pin != CLAVE_ADMIN else "ADMIN"
+            registrar_evento(st.session_state.nombre, st.session_state.localidad, "INGRESO", "Sesión iniciada")
             st.rerun()
-        elif loc_sel in LOCALIDADES_CLAVES and pin == LOCALIDADES_CLAVES[loc_sel] and nombre_m != "":
-            st.session_state.autenticado, st.session_state.nombre, st.session_state.localidad, st.session_state.es_admin = True, nombre_m, loc_sel, False
-            registrar_evento(nombre_m, loc_sel, "INGRESO", "Inicio sesión")
-            st.rerun()
-        else:
-            st.error("DATOS INCORRECTOS O NOMBRE VACÍO")
+        else: st.error("DATOS INCORRECTOS")
 else:
-    # --- PANTALLA DE CONSULTA RESTAURADA ---
+    # --- PANEL DE BÚSQUEDA (CORREGIDO PARA QUE NO DESAPAREZCA) ---
     st.markdown('<div class="banner"><h3>CONSULTA DE AFILIADOS - LISTA 4</h3></div>', unsafe_allow_html=True)
     st.write(f"**Compañerx:** {st.session_state.nombre} | **Zona:** {st.session_state.localidad}")
+    
+    # El buscador ahora está FUERA de la función de carga para asegurar que se vea
+    busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
     
     @st.cache_data
     def cargar_datos():
         archivo = "Padron 2026  PJ BONAERENSE Completo Calles 1.csv"
+        if not os.path.exists(archivo):
+            st.error(f"Archivo no encontrado: {archivo}")
+            return None
         for enc in ['latin-1', 'cp1252', 'utf-8']:
             try:
                 df = pd.read_csv(archivo, encoding=enc, sep=None, engine='python')
-                visibles = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'MATRICULA', 'NOMBRE', 'APELLIDO', 'DIRECCION', 'CALLE'])]
-                return df[visibles].fillna('')
+                columnas = [c for c in df.columns if any(x in c.upper() for x in ['DNI', 'NOMBRE', 'APELLIDO', 'CALLE', 'DIRECCION'])]
+                return df[columnas].fillna('')
             except: continue
         return None
 
-    df_padron = cargar_datos()
-    if df_padron is not None:
-        # Recuperamos el panel de búsqueda
-        busqueda = st.text_input("🔎 BUSCAR POR CALLE, APELLIDO O DNI:")
-        if busqueda:
+    if busqueda:
+        df_padron = cargar_datos()
+        if df_padron is not None:
             t = busqueda.upper()
             mask = df_padron.astype(str).apply(lambda row: row.str.upper().str.contains(t)).any(axis=1)
             res = df_padron[mask]
             if not res.empty:
                 registrar_evento(st.session_state.nombre, st.session_state.localidad, "BÚSQUEDA", busqueda)
-                st.success(f"Resultados: {len(res)}")
                 st.dataframe(res, use_container_width=True)
             else: st.warning("No se encontraron resultados.")
 
